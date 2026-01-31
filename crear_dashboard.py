@@ -1,258 +1,262 @@
 """
-Dashboard Interactivo - Justificación Recurso Enfermero UTINQX
-=============================================================
-
-Este script genera un dashboard HTML interactivo usando Plotly.
-El HTML resultante se puede subir a GitHub Pages.
-
-CONCEPTOS DE VISUALIZACIÓN:
---------------------------
-1. INDICADORES (Indicators) - Para métricas clave numéricas
-   → Muestran un número grande con contexto (ej: "2x más carga")
-
-2. GRÁFICOS DE BARRAS - Para comparar categorías
-   → Comparan valores entre grupos (ej: UTINQX vs UTIQX)
-
-3. GRÁFICOS DE LÍNEA - Para tendencias temporales
-   → Muestran evolución en el tiempo (ej: carga por mes)
-
-4. GRÁFICOS DE PASTEL/DONA - Para proporciones
-   → Muestran partes de un todo (ej: % alto riesgo)
-
-5. TABLAS - Para datos precisos
-   → Cuando el número exacto importa
-
-COLORES:
---------
-- Rojo (#e74c3c) → UTINQX (alerta, urgencia)
-- Azul (#3498db) → UTIQX (comparación, neutro)
-- Verde (#27ae60) → Mejora, positivo
-- Naranja (#f39c12) → Advertencia
-
+Dashboard - Categorizacion CUDYR 2024-2025
+============================================
+Solo datos duros: conteos directos de los archivos de categorizacion.
+Sin supuestos de dotacion, sin indices inventados, sin proyecciones.
+Genera 3 HTML: index.html (resumen UTINQX), dashboard_utinqx.html (interactivo),
+ambas_uti.html (exposicion de datos ambas UTIs).
 """
 
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import plotly.express as px
 
 # ============================================================
-# 1. CARGAR Y PREPARAR DATOS
+# 1. CARGAR DATOS
 # ============================================================
 print("[1/5] Cargando datos...")
 
-# Cargar los 4 archivos Excel (saltando las 2 primeras filas de encabezado)
-utiqx_2024 = pd.read_excel("Cat_UTIQX_2024.xlsx", header=2)
-utiqx_2025 = pd.read_excel("Cat_UTIQX_2025.xlsx", header=2)
 utinqx_2024 = pd.read_excel("Cat_UTINQX_2024.xlsx", header=2)
 utinqx_2025 = pd.read_excel("Cat_UTINQx_2025.xlsx", header=2)
+utiqx_2024 = pd.read_excel("Cat_UTIQX_2024.xlsx", header=2)
+utiqx_2025 = pd.read_excel("Cat_UTIQX_2025.xlsx", header=2)
 
-# Convertir fechas
-for df in [utiqx_2024, utiqx_2025, utinqx_2024, utinqx_2025]:
+for df in [utinqx_2024, utinqx_2025, utiqx_2024, utiqx_2025]:
     df['FECHA_CATEGORIZACION'] = pd.to_datetime(df['FECHA_CATEGORIZACION'], format='%d-%m-%Y')
     df['MES'] = df['FECHA_CATEGORIZACION'].dt.month
 
-# Funciones de análisis
-def calcular_complejidad(categoria):
-    """Calcula índice de complejidad basado en categoría CUDYR"""
-    if pd.isna(categoria):
-        return None
-    letra = categoria[0]
-    numero = categoria[1]
-    riesgo = {'A': 4, 'B': 3, 'C': 2, 'D': 1}
-    dependencia = {'1': 3, '2': 2, '3': 1}
-    return riesgo.get(letra, 0) + dependencia.get(numero, 0)
-
-def es_alto_riesgo(categoria):
-    """Determina si es categoría de alto riesgo (A o B)"""
-    if pd.isna(categoria):
+def es_alto_riesgo(cat):
+    if pd.isna(cat):
         return False
-    return categoria[0] in ['A', 'B']
+    return cat[0] in ['A', 'B']
 
-# Aplicar funciones
-for df in [utiqx_2024, utiqx_2025, utinqx_2024, utinqx_2025]:
-    df['COMPLEJIDAD'] = df['CATEGORIA'].apply(calcular_complejidad)
+for df in [utinqx_2024, utinqx_2025, utiqx_2024, utiqx_2025]:
     df['ALTO_RIESGO'] = df['CATEGORIA'].apply(es_alto_riesgo)
 
-print("    OK - Datos cargados y procesados")
+print("    OK")
 
 # ============================================================
-# 2. CALCULAR MÉTRICAS CLAVE
+# 2. CALCULAR METRICAS (solo conteos directos)
 # ============================================================
 print("[2/5] Calculando metricas...")
 
-# Constantes de dotación
-ENF_UTINQX = 1
-ENF_UTIQX = 3
+# Totales
+total_2024 = len(utinqx_2024)
+total_2025 = len(utinqx_2025)
+variacion_anual = ((total_2025 - total_2024) / total_2024) * 100
 
-# Filtrar Jun-Dic 2025
-utinqx_2025_jun = utinqx_2025[utinqx_2025['MES'] >= 6]
-utiqx_2025_jun = utiqx_2025[utiqx_2025['MES'] >= 6]
+# Pacientes unicos
+pac_2024 = utinqx_2024['RUT'].nunique()
+pac_2025 = utinqx_2025['RUT'].nunique()
 
-# Métricas principales
-cat_ar_utinqx = utinqx_2025_jun['ALTO_RIESGO'].sum()
-cat_ar_utiqx = utiqx_2025_jun['ALTO_RIESGO'].sum()
-carga_por_enf_utinqx = cat_ar_utinqx / ENF_UTINQX
-carga_por_enf_utiqx = cat_ar_utiqx / ENF_UTIQX
-ratio_carga = carga_por_enf_utinqx / carga_por_enf_utiqx
+# Categorizaciones por mes
+cat_mes_2024 = utinqx_2024.groupby('MES').size()
+cat_mes_2025 = utinqx_2025.groupby('MES').size()
 
-pct_ar_utinqx = utinqx_2025_jun['ALTO_RIESGO'].mean() * 100
-pct_ar_utiqx = utiqx_2025_jun['ALTO_RIESGO'].mean() * 100
+# Diferencia mes a mes
+diff_mes = cat_mes_2025 - cat_mes_2024
 
-# Aumento desde abril
-carga_2024_abr = utinqx_2024[utinqx_2024['MES'] >= 4]['COMPLEJIDAD'].sum()
-carga_2025_abr = utinqx_2025[utinqx_2025['MES'] >= 4]['COMPLEJIDAD'].sum()
-aumento_carga = ((carga_2025_abr - carga_2024_abr) / carga_2024_abr) * 100
+# % Alto riesgo (A+B) anual
+pct_ar_2024 = utinqx_2024['ALTO_RIESGO'].mean() * 100
+pct_ar_2025 = utinqx_2025['ALTO_RIESGO'].mean() * 100
 
-# Crecimiento anual
-crec_utinqx = ((len(utinqx_2025) - len(utinqx_2024)) / len(utinqx_2024)) * 100
-crec_utiqx = ((len(utiqx_2025) - len(utiqx_2024)) / len(utiqx_2024)) * 100
+# % Alto riesgo por mes
+ar_mes_2024 = utinqx_2024.groupby('MES')['ALTO_RIESGO'].mean() * 100
+ar_mes_2025 = utinqx_2025.groupby('MES')['ALTO_RIESGO'].mean() * 100
 
-# A1 por enfermero
-a1_utinqx = (utinqx_2025['CATEGORIA'] == 'A1').sum() / ENF_UTINQX
-a1_utiqx = (utiqx_2025['CATEGORIA'] == 'A1').sum() / ENF_UTIQX
+# Distribucion de categorias
+dist_2024 = utinqx_2024['CATEGORIA'].value_counts()
+dist_2025 = utinqx_2025['CATEGORIA'].value_counts()
 
-print("    OK - Metricas calculadas")
+# A1 (maximo riesgo + dependencia total)
+a1_2024 = (utinqx_2024['CATEGORIA'] == 'A1').sum()
+a1_2025 = (utinqx_2025['CATEGORIA'] == 'A1').sum()
+
+# Categorizaciones A+B totales
+ab_2024 = utinqx_2024['ALTO_RIESGO'].sum()
+ab_2025 = utinqx_2025['ALTO_RIESGO'].sum()
+
+# Pacientes que cambian de categoria durante estadia
+cambios_2024 = utinqx_2024.groupby('RUT')['CATEGORIA'].nunique()
+cambios_2025 = utinqx_2025.groupby('RUT')['CATEGORIA'].nunique()
+pac_cambian_2024 = (cambios_2024 > 1).sum()
+pac_cambian_2025 = (cambios_2025 > 1).sum()
+pct_cambian_2024 = pac_cambian_2024 / pac_2024 * 100
+pct_cambian_2025 = pac_cambian_2025 / pac_2025 * 100
+
+# Pacientes que suben de categoria (empeoran)
+empeoran_2025 = 0
+total_con_evol_2025 = 0
+for rut in utinqx_2025['RUT'].unique():
+    pac = utinqx_2025[utinqx_2025['RUT'] == rut].sort_values('FECHA_CATEGORIZACION')
+    if len(pac) < 2:
+        continue
+    total_con_evol_2025 += 1
+    primera = pac['CATEGORIA'].iloc[0]
+    ultima = pac['CATEGORIA'].iloc[-1]
+    # Empeora si sube de riesgo (letra menor) o sube de dependencia (numero menor)
+    orden_riesgo = {'A': 4, 'B': 3, 'C': 2, 'D': 1}
+    orden_dep = {'1': 3, '2': 2, '3': 1}
+    score_primera = orden_riesgo.get(primera[0], 0) + orden_dep.get(primera[1], 0)
+    score_ultima = orden_riesgo.get(ultima[0], 0) + orden_dep.get(ultima[1], 0)
+    if score_ultima > score_primera:
+        empeoran_2025 += 1
+
+# Estadia promedio (categorizaciones por paciente = dias aprox)
+estadia_2024 = total_2024 / pac_2024
+estadia_2025 = total_2025 / pac_2025
+
+# ----- METRICAS UTIQX -----
+qx_total_2024 = len(utiqx_2024)
+qx_total_2025 = len(utiqx_2025)
+qx_pac_2024 = utiqx_2024['RUT'].nunique()
+qx_pac_2025 = utiqx_2025['RUT'].nunique()
+qx_cat_mes_2024 = utiqx_2024.groupby('MES').size()
+qx_cat_mes_2025 = utiqx_2025.groupby('MES').size()
+qx_pct_ar_2024 = utiqx_2024['ALTO_RIESGO'].mean() * 100
+qx_pct_ar_2025 = utiqx_2025['ALTO_RIESGO'].mean() * 100
+qx_ar_mes_2024 = utiqx_2024.groupby('MES')['ALTO_RIESGO'].mean() * 100
+qx_ar_mes_2025 = utiqx_2025.groupby('MES')['ALTO_RIESGO'].mean() * 100
+qx_dist_2024 = utiqx_2024['CATEGORIA'].value_counts()
+qx_dist_2025 = utiqx_2025['CATEGORIA'].value_counts()
+qx_a1_2024 = (utiqx_2024['CATEGORIA'] == 'A1').sum()
+qx_a1_2025 = (utiqx_2025['CATEGORIA'] == 'A1').sum()
+qx_ab_2024 = utiqx_2024['ALTO_RIESGO'].sum()
+qx_ab_2025 = utiqx_2025['ALTO_RIESGO'].sum()
+qx_estadia_2024 = qx_total_2024 / qx_pac_2024
+qx_estadia_2025 = qx_total_2025 / qx_pac_2025
+
+print("    OK")
 
 # ============================================================
-# 3. CREAR DASHBOARD CON PLOTLY
+# 3. CREAR DASHBOARD
 # ============================================================
-print("[3/5] Creando dashboard...")
+print("[3/5] Creando dashboard UTINQX...")
 
-# Colores del dashboard
-COLOR_UTINQX = '#e74c3c'  # Rojo - urgencia
-COLOR_UTIQX = '#3498db'   # Azul - comparación
-COLOR_FONDO = '#f8f9fa'   # Gris claro
+ROJO = '#c0392b'
+ROJO_SUAVE = '#e74c3c'
+AZUL = '#2c3e50'
+GRIS = '#95a5a6'
+GRIS_CLARO = '#bdc3c7'
+VERDE = '#27ae60'
+NARANJA = '#e67e22'
+FONDO = '#f8f9fa'
 
-# Crear figura con subplots
-# Esto crea una cuadrícula donde colocamos diferentes gráficos
+meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+         'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
 fig = make_subplots(
-    rows=4, cols=3,
+    rows=5, cols=3,
     specs=[
-        # Fila 1: 3 indicadores grandes
+        # Fila 1: 3 indicadores de volumen
         [{"type": "indicator"}, {"type": "indicator"}, {"type": "indicator"}],
-        # Fila 2: Gráfico de barras grande + indicador
-        [{"type": "bar", "colspan": 2}, None, {"type": "indicator"}],
-        # Fila 3: Gráfico de línea (tendencia) + pastel
+        # Fila 2: Tendencia categorizaciones mensual (grande)
+        [{"type": "bar", "colspan": 3}, None, None],
+        # Fila 3: % alto riesgo por mes + distribucion categorias
         [{"type": "scatter", "colspan": 2}, None, {"type": "pie"}],
-        # Fila 4: Comparación barras + tabla resumen
-        [{"type": "bar", "colspan": 2}, None, {"type": "indicator"}],
+        # Fila 4: Diferencia mes a mes 2025 vs 2024
+        [{"type": "bar", "colspan": 3}, None, None],
+        # Fila 5: 3 indicadores de pacientes
+        [{"type": "indicator"}, {"type": "indicator"}, {"type": "indicator"}],
     ],
     subplot_titles=[
-        "Ratio Enfermero:Paciente", "Carga por Enfermero", "Aumento desde Abril",
-        "Categorizaciones Alto Riesgo por Enfermero (Jun-Dic 2025)", "", "% Pacientes Alto Riesgo",
-        "Tendencia Mensual: Carga por Enfermero (2025)", "", "Distribución Categorías UTINQX",
-        "Pacientes A1 (Máximo Riesgo) por Enfermero", "", "Crecimiento Anual"
+        "", "", "",
+        "Categorizaciones Mensuales UTINQX: 2024 vs 2025",
+        "", "",
+        "Porcentaje de Pacientes Alto Riesgo (A+B) por Mes",
+        "", "Distribucion de Categorias CUDYR (2025)",
+        "Diferencia Mensual 2025 vs 2024 (categorizaciones)",
+        "", "",
+        "", "", ""
     ],
-    vertical_spacing=0.12,
-    horizontal_spacing=0.08
+    vertical_spacing=0.10,
+    horizontal_spacing=0.08,
+    row_heights=[0.12, 0.20, 0.20, 0.20, 0.12]
 )
 
-# ----------------------------------------------------------
-# FILA 1: INDICADORES PRINCIPALES (Los números más impactantes)
-# ----------------------------------------------------------
+# ============================================================
+# FILA 1: INDICADORES DE VOLUMEN
+# ============================================================
 
-# Indicador 1: Ratio enfermero:paciente
-# Los INDICADORES son perfectos para mostrar una métrica clave
 fig.add_trace(
     go.Indicator(
-        mode="number+delta",  # Muestra número + diferencia
-        value=6,              # UTINQX tiene ratio 1:6
-        title={"text": "UTINQX<br><span style='font-size:0.7em'>pacientes por enfermero</span>"},
-        delta={'reference': 3, 'relative': False, 'valueformat': '.0f'},  # Comparado con UTIQX (1:3)
-        number={'font': {'size': 60, 'color': COLOR_UTINQX}},
-        domain={'row': 0, 'column': 0}
+        mode="number+delta",
+        value=total_2025,
+        title={"text": "Categorizaciones 2025<br><span style='font-size:0.6em;color:#888'>total realizadas</span>"},
+        delta={'reference': total_2024, 'relative': True, 'valueformat': '.1%',
+               'increasing': {'color': ROJO_SUAVE}},
+        number={'font': {'size': 48, 'color': AZUL}},
     ),
     row=1, col=1
 )
 
-# Indicador 2: Carga de trabajo
 fig.add_trace(
     go.Indicator(
         mode="number+delta",
-        value=round(ratio_carga, 1),
-        title={"text": "Veces más carga<br><span style='font-size:0.7em'>UTINQX vs UTIQX</span>"},
-        delta={'reference': 1, 'relative': False},
-        number={'font': {'size': 60, 'color': COLOR_UTINQX}, 'suffix': 'x'},
-        domain={'row': 0, 'column': 1}
+        value=pac_2025,
+        title={"text": "Pacientes Unicos 2025<br><span style='font-size:0.6em;color:#888'>atendidos en la unidad</span>"},
+        delta={'reference': pac_2024, 'relative': True, 'valueformat': '.1%',
+               'increasing': {'color': ROJO_SUAVE}},
+        number={'font': {'size': 48, 'color': AZUL}},
     ),
     row=1, col=2
 )
 
-# Indicador 3: Aumento desde abril
 fig.add_trace(
     go.Indicator(
         mode="number+delta",
-        value=round(aumento_carga, 1),
-        title={"text": "Aumento de carga<br><span style='font-size:0.7em'>desde llegada residente</span>"},
-        delta={'reference': 0, 'relative': False},
-        number={'font': {'size': 60, 'color': COLOR_UTINQX}, 'suffix': '%'},
-        domain={'row': 0, 'column': 2}
+        value=round(pct_ar_2025, 1),
+        title={"text": "Alto Riesgo (A+B) 2025<br><span style='font-size:0.6em;color:#888'>% del total de categorizaciones</span>"},
+        delta={'reference': round(pct_ar_2024, 1), 'relative': False, 'valueformat': '.1f',
+               'suffix': ' pp', 'increasing': {'color': ROJO_SUAVE}},
+        number={'font': {'size': 48, 'color': ROJO}, 'suffix': '%'},
     ),
     row=1, col=3
 )
 
-# ----------------------------------------------------------
-# FILA 2: GRÁFICO DE BARRAS - Comparación de carga
-# ----------------------------------------------------------
+# ============================================================
+# FILA 2: BARRAS COMPARATIVAS POR MES
+# ============================================================
 
-# Gráfico de barras: perfecto para COMPARAR categorías
 fig.add_trace(
     go.Bar(
-        x=['UTINQX (1 enfermero)', 'UTIQX (3 enfermeros)'],
-        y=[carga_por_enf_utinqx, carga_por_enf_utiqx],
-        marker_color=[COLOR_UTINQX, COLOR_UTIQX],
-        text=[f'{carga_por_enf_utinqx:.0f}', f'{carga_por_enf_utiqx:.0f}'],
+        x=meses,
+        y=[cat_mes_2024.get(i, 0) for i in range(1, 13)],
+        name='2024',
+        marker_color=GRIS_CLARO,
+        text=[str(cat_mes_2024.get(i, 0)) for i in range(1, 13)],
         textposition='outside',
-        textfont={'size': 16, 'color': 'black'}
+        textfont={'size': 10},
     ),
     row=2, col=1
 )
 
-# Indicador de % alto riesgo UTINQX
 fig.add_trace(
-    go.Indicator(
-        mode="gauge+number",
-        value=pct_ar_utinqx,
-        title={"text": "UTINQX"},
-        gauge={
-            'axis': {'range': [0, 100]},
-            'bar': {'color': COLOR_UTINQX},
-            'steps': [
-                {'range': [0, 50], 'color': '#d5f5d5'},
-                {'range': [50, 80], 'color': '#fff3cd'},
-                {'range': [80, 100], 'color': '#f8d7da'}
-            ],
-            'threshold': {
-                'line': {'color': "black", 'width': 4},
-                'thickness': 0.75,
-                'value': 99.1
-            }
-        },
-        number={'suffix': '%', 'font': {'size': 30}}
+    go.Bar(
+        x=meses,
+        y=[cat_mes_2025.get(i, 0) for i in range(1, 13)],
+        name='2025',
+        marker_color=ROJO_SUAVE,
+        text=[str(cat_mes_2025.get(i, 0)) for i in range(1, 13)],
+        textposition='outside',
+        textfont={'size': 10},
     ),
-    row=2, col=3
+    row=2, col=1
 )
 
-# ----------------------------------------------------------
-# FILA 3: GRÁFICO DE LÍNEA + PASTEL
-# ----------------------------------------------------------
+# ============================================================
+# FILA 3: % ALTO RIESGO POR MES + DONA
+# ============================================================
 
-# Datos de tendencia mensual
-alto_riesgo_mes_utinqx = utinqx_2025[utinqx_2025['ALTO_RIESGO']].groupby('MES').size() / ENF_UTINQX
-alto_riesgo_mes_utiqx = utiqx_2025[utiqx_2025['ALTO_RIESGO']].groupby('MES').size() / ENF_UTIQX
-
-meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-
-# Gráfico de línea: perfecto para TENDENCIAS temporales
 fig.add_trace(
     go.Scatter(
         x=meses,
-        y=[alto_riesgo_mes_utinqx.get(i, 0) for i in range(1, 13)],
+        y=[ar_mes_2024.get(i, 0) for i in range(1, 13)],
         mode='lines+markers',
-        name='UTINQX',
-        line={'color': COLOR_UTINQX, 'width': 3},
-        marker={'size': 10}
+        name='% A+B 2024',
+        line={'color': GRIS, 'width': 2, 'dash': 'dash'},
+        marker={'size': 7},
+        showlegend=False,
     ),
     row=3, col=1
 )
@@ -260,90 +264,175 @@ fig.add_trace(
 fig.add_trace(
     go.Scatter(
         x=meses,
-        y=[alto_riesgo_mes_utiqx.get(i, 0) for i in range(1, 13)],
+        y=[ar_mes_2025.get(i, 0) for i in range(1, 13)],
         mode='lines+markers',
-        name='UTIQX',
-        line={'color': COLOR_UTIQX, 'width': 3},
-        marker={'size': 10}
+        name='% A+B 2025',
+        line={'color': ROJO, 'width': 3},
+        marker={'size': 9},
+        showlegend=False,
     ),
     row=3, col=1
 )
 
-# Gráfico de pastel: distribución de categorías UTINQX
-categorias_dist = utinqx_2025['CATEGORIA'].value_counts()
+# Anotaciones con valores 2024 y 2025 en el grafico
+fig.add_annotation(
+    x='Dic', y=ar_mes_2025.get(12, 0),
+    text=f"2025: {ar_mes_2025.get(12, 0):.0f}%",
+    showarrow=False, font={'size': 10, 'color': ROJO},
+    xshift=30, row=3, col=1
+)
+fig.add_annotation(
+    x='Dic', y=ar_mes_2024.get(12, 0),
+    text=f"2024: {ar_mes_2024.get(12, 0):.0f}%",
+    showarrow=False, font={'size': 10, 'color': GRIS},
+    xshift=30, row=3, col=1
+)
+
+# Dona de categorias 2025
+colores_cat = {
+    'A1': '#c0392b', 'A2': '#e74c3c',
+    'B1': '#e67e22', 'B2': '#f39c12', 'B3': '#f1c40f',
+    'C1': '#27ae60', 'C2': '#2ecc71', 'C3': '#82e0aa',
+    'D2': '#3498db'
+}
+cat_colors = [colores_cat.get(c, '#bdc3c7') for c in dist_2025.index.tolist()]
+
 fig.add_trace(
     go.Pie(
-        labels=categorias_dist.index.tolist(),
-        values=categorias_dist.values.tolist(),
-        hole=0.4,  # Hace que sea "dona" en vez de pastel
-        marker_colors=px.colors.sequential.Reds_r
+        labels=dist_2025.index.tolist(),
+        values=dist_2025.values.tolist(),
+        hole=0.45,
+        marker_colors=cat_colors,
+        textinfo='label+percent',
+        textfont={'size': 11},
+        showlegend=False
     ),
     row=3, col=3
 )
 
-# ----------------------------------------------------------
-# FILA 4: A1 por enfermero + Crecimiento
-# ----------------------------------------------------------
+# ============================================================
+# FILA 4: DIFERENCIA MES A MES (barras positivas/negativas)
+# ============================================================
+
+diff_values = [diff_mes.get(i, 0) for i in range(1, 13)]
+diff_colors = [ROJO_SUAVE if v > 0 else VERDE for v in diff_values]
 
 fig.add_trace(
     go.Bar(
-        x=['UTINQX', 'UTIQX'],
-        y=[a1_utinqx, a1_utiqx],
-        marker_color=[COLOR_UTINQX, COLOR_UTIQX],
-        text=[f'{a1_utinqx:.0f}', f'{a1_utiqx:.0f}'],
+        x=meses,
+        y=diff_values,
+        marker_color=diff_colors,
+        text=[f'+{v}' if v > 0 else str(v) for v in diff_values],
         textposition='outside',
-        textfont={'size': 16}
+        textfont={'size': 11},
+        showlegend=False,
     ),
     row=4, col=1
 )
 
-# Indicador de crecimiento
+# Linea en cero se muestra automaticamente con el eje
+
+# ============================================================
+# FILA 5: INDICADORES DE PACIENTES
+# ============================================================
+
 fig.add_trace(
     go.Indicator(
         mode="number+delta",
-        value=round(crec_utinqx, 1),
-        title={"text": "UTINQX<br><span style='font-size:0.7em'>vs 2024</span>"},
-        delta={'reference': crec_utiqx, 'relative': False, 'valueformat': '.1f'},
-        number={'font': {'size': 40, 'color': COLOR_UTINQX}, 'suffix': '%'}
+        value=a1_2025,
+        title={"text": "Categorizaciones A1<br><span style='font-size:0.6em;color:#888'>maximo riesgo + dependencia total</span>"},
+        delta={'reference': a1_2024, 'relative': True, 'valueformat': '.1%',
+               'increasing': {'color': ROJO_SUAVE}},
+        number={'font': {'size': 44, 'color': ROJO}},
     ),
-    row=4, col=3
+    row=5, col=1
 )
 
-# ----------------------------------------------------------
-# CONFIGURACIÓN FINAL DEL LAYOUT
-# ----------------------------------------------------------
+fig.add_trace(
+    go.Indicator(
+        mode="number+delta",
+        value=pac_cambian_2025,
+        title={"text": "Cambian de Categoria<br><span style='font-size:0.6em;color:#888'>pacientes con 2+ categorias distintas ({0:.1f}% del total)</span>".format(pct_cambian_2025)},
+        delta={'reference': pac_cambian_2024, 'relative': True, 'valueformat': '.1%'},
+        number={'font': {'size': 44, 'color': NARANJA}},
+    ),
+    row=5, col=2
+)
+
+fig.add_trace(
+    go.Indicator(
+        mode="number",
+        value=empeoran_2025,
+        title={"text": "Pacientes que Empeoran<br><span style='font-size:0.6em;color:#888'>egresan con mayor riesgo que al ingreso</span>"},
+        number={'font': {'size': 44, 'color': ROJO}},
+    ),
+    row=5, col=3
+)
+
+# ============================================================
+# LAYOUT
+# ============================================================
 
 fig.update_layout(
     title={
-        'text': '📊 Dashboard: Justificación Recurso Enfermero UTINQX<br><sup>Análisis de Categorización CUDYR 2024-2025</sup>',
-        'x': 0.5,
-        'xanchor': 'center',
-        'font': {'size': 24}
+        'text': (
+            'UTINQX - Categorizacion CUDYR 2024-2025'
+            '<br><sup style="color:#888">Datos de categorizacion | UTI Neuroquirurgica</sup>'
+        ),
+        'x': 0.5, 'xanchor': 'center',
+        'font': {'size': 22, 'color': AZUL}
     },
     showlegend=True,
-    legend={'orientation': 'h', 'yanchor': 'bottom', 'y': 1.02, 'xanchor': 'center', 'x': 0.5},
-    height=1200,
+    legend={
+        'orientation': 'h',
+        'yanchor': 'top', 'y': -0.02,
+        'xanchor': 'center', 'x': 0.5,
+        'font': {'size': 12}
+    },
+    height=1700,
     template='plotly_white',
-    paper_bgcolor=COLOR_FONDO,
-    margin={'t': 100, 'b': 50, 'l': 50, 'r': 50}
+    paper_bgcolor=FONDO,
+    plot_bgcolor='white',
+    margin={'t': 100, 'b': 60, 'l': 60, 'r': 60, 'pad': 10},
+    font={'family': 'Segoe UI, sans-serif'},
+    barmode='group',
 )
 
-# Actualizar ejes
 fig.update_yaxes(title_text="Categorizaciones", row=2, col=1)
-fig.update_yaxes(title_text="Categorizaciones/enfermero", row=3, col=1)
-fig.update_yaxes(title_text="Pacientes A1", row=4, col=1)
+fig.update_yaxes(title_text="% Alto Riesgo", row=3, col=1, range=[82, 102])
+fig.update_yaxes(title_text="Diferencia", row=4, col=1, range=[-75, 85])
 
-print("    OK - Dashboard creado")
+print("    OK")
 
 # ============================================================
-# 4. EXPORTAR A HTML
+# 4. EXPORTAR
 # ============================================================
-print("[4/5] Exportando a HTML...")
+print("[4/5] Exportando dashboard UTINQX...")
 
-# Guardar como HTML autónomo (incluye todo el JS necesario)
+# Barra de navegacion comun
+NAV_BAR = """
+<nav style="background:#2c3e50;padding:10px 20px;display:flex;gap:15px;align-items:center;font-family:'Segoe UI',sans-serif;">
+    <a href="index.html" style="color:white;text-decoration:none;padding:6px 14px;border-radius:6px;font-size:0.9em;{nav_active_index}">Resumen UTINQX</a>
+    <a href="dashboard_utinqx.html" style="color:white;text-decoration:none;padding:6px 14px;border-radius:6px;font-size:0.9em;{nav_active_dash}">Dashboard UTINQX</a>
+    <a href="ambas_uti.html" style="color:white;text-decoration:none;padding:6px 14px;border-radius:6px;font-size:0.9em;{nav_active_ambas}">Ambas UTIs</a>
+</nav>
+"""
+
+def get_nav(active):
+    """Genera la barra de navegacion con el boton activo resaltado."""
+    style_active = "background:rgba(255,255,255,0.2);font-weight:bold;"
+    style_normal = "opacity:0.8;"
+    return NAV_BAR.format(
+        nav_active_index=style_active if active == 'index' else style_normal,
+        nav_active_dash=style_active if active == 'dashboard' else style_normal,
+        nav_active_ambas=style_active if active == 'ambas' else style_normal,
+    )
+
+# Inyectar nav en el dashboard Plotly
+dashboard_nav = get_nav('dashboard')
 fig.write_html(
     "dashboard_utinqx.html",
-    include_plotlyjs=True,  # Incluye Plotly JS en el archivo
+    include_plotlyjs=True,
     full_html=True,
     config={
         'displayModeBar': True,
@@ -352,276 +441,632 @@ fig.write_html(
     }
 )
 
-print("    OK - Dashboard guardado como 'dashboard_utinqx.html'")
-print("\n    LISTO! Abre el archivo HTML en tu navegador para ver el dashboard.")
-print("    Este archivo se puede subir directamente a GitHub Pages.")
+# Leer el HTML generado e insertar nav despues de <body>
+with open("dashboard_utinqx.html", "r", encoding="utf-8") as f:
+    dash_html = f.read()
+dash_html = dash_html.replace("<body>", f"<body>\n{dashboard_nav}", 1)
+with open("dashboard_utinqx.html", "w", encoding="utf-8") as f:
+    f.write(dash_html)
 
-# ============================================================
-# 5. CREAR PÁGINA INDEX CON RESUMEN EJECUTIVO
-# ============================================================
-print("\n[5/5] Creando pagina de resumen ejecutivo...")
-
-# HTML con estilos y resumen
-html_resumen = f"""
-<!DOCTYPE html>
+# INDEX.HTML - Solo datos duros
+nav_index = get_nav('index')
+html_index = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Justificación Recurso Enfermero UTINQX</title>
+    <title>UTINQX - Categorizacion CUDYR 2024-2025</title>
     <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }}
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
+            background: #f0f2f5;
+            color: #2c3e50;
+            line-height: 1.6;
         }}
         .header {{
-            text-align: center;
+            background: linear-gradient(135deg, #2c3e50, #34495e);
             color: white;
             padding: 40px 20px;
+            text-align: center;
         }}
-        .header h1 {{
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }}
-        .header p {{
-            font-size: 1.2em;
-            opacity: 0.9;
-        }}
-        .cards {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin-top: 30px;
-        }}
+        .header h1 {{ font-size: 2em; margin-bottom: 8px; }}
+        .header p {{ font-size: 1em; opacity: 0.85; }}
+        .container {{ max-width: 1100px; margin: 0 auto; padding: 30px 20px; }}
+
+        .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 30px; }}
+
         .card {{
             background: white;
-            border-radius: 15px;
+            border-radius: 12px;
             padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: transform 0.3s;
-        }}
-        .card:hover {{
-            transform: translateY(-5px);
-        }}
-        .card.highlight {{
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
-            color: white;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
         }}
         .card h3 {{
-            font-size: 1.1em;
+            color: #7f8c8d;
+            margin-bottom: 8px;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        .card .valor {{
+            font-size: 2.8em;
+            font-weight: bold;
+            color: #2c3e50;
+        }}
+        .card .valor.rojo {{ color: #c0392b; }}
+        .card .cambio {{
+            font-size: 0.95em;
+            margin-top: 8px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            display: inline-block;
+        }}
+        .card .cambio.sube {{ background: #fce4e4; color: #c0392b; }}
+        .card .cambio.baja {{ background: #d5f5d5; color: #27ae60; }}
+        .card .detalle {{ color: #95a5a6; font-size: 0.9em; margin-top: 8px; }}
+
+        .seccion {{ margin-bottom: 30px; }}
+        .seccion h2 {{
+            color: #2c3e50;
             margin-bottom: 15px;
-            color: #333;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e0e0e0;
         }}
-        .card.highlight h3 {{
-            color: white;
-        }}
-        .metric {{
-            font-size: 3em;
-            font-weight: bold;
-            color: #e74c3c;
-        }}
-        .card.highlight .metric {{
-            color: white;
-        }}
-        .metric-label {{
-            font-size: 0.9em;
-            color: #666;
-            margin-top: 5px;
-        }}
-        .card.highlight .metric-label {{
-            color: rgba(255,255,255,0.8);
-        }}
-        .conclusion {{
+
+        .tabla-container {{
             background: white;
-            border-radius: 15px;
-            padding: 30px;
-            margin-top: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            overflow-x: auto;
         }}
-        .conclusion h2 {{
-            color: #333;
-            margin-bottom: 20px;
-            border-bottom: 3px solid #e74c3c;
-            padding-bottom: 10px;
+        table {{ width: 100%; border-collapse: collapse; font-size: 0.95em; }}
+        th {{ background: #2c3e50; color: white; padding: 10px 12px; text-align: center; }}
+        td {{ padding: 8px 12px; text-align: center; border-bottom: 1px solid #ecf0f1; }}
+        tr:hover {{ background: #f8f9fa; }}
+        .positivo {{ color: #c0392b; font-weight: bold; }}
+        .negativo {{ color: #27ae60; }}
+
+        .nota {{
+            background: #fef9e7;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #7d6608;
         }}
-        .conclusion ul {{
-            list-style: none;
-            padding: 0;
-        }}
-        .conclusion li {{
-            padding: 10px 0;
-            padding-left: 30px;
-            position: relative;
-            font-size: 1.1em;
-        }}
-        .conclusion li:before {{
-            content: "✓";
-            position: absolute;
-            left: 0;
-            color: #27ae60;
-            font-weight: bold;
-        }}
+
         .btn {{
             display: inline-block;
-            background: #e74c3c;
+            background: #2c3e50;
             color: white;
-            padding: 15px 30px;
-            border-radius: 30px;
+            padding: 12px 24px;
+            border-radius: 8px;
             text-decoration: none;
             font-weight: bold;
             margin-top: 20px;
-            transition: background 0.3s;
         }}
-        .btn:hover {{
-            background: #c0392b;
-        }}
+        .btn:hover {{ background: #34495e; }}
+
         .footer {{
             text-align: center;
-            color: white;
-            padding: 30px;
-            opacity: 0.8;
-        }}
-        .comparison {{
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-top: 15px;
-        }}
-        .comp-item {{
-            text-align: center;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 10px;
-        }}
-        .comp-item.utinqx {{
-            background: #fce4e4;
-        }}
-        .comp-item.utiqx {{
-            background: #e4f1fc;
-        }}
-        .comp-value {{
-            font-size: 2em;
-            font-weight: bold;
-        }}
-        .comp-item.utinqx .comp-value {{
-            color: #e74c3c;
-        }}
-        .comp-item.utiqx .comp-value {{
-            color: #3498db;
+            padding: 25px;
+            color: #95a5a6;
+            font-size: 0.85em;
         }}
     </style>
 </head>
 <body>
+    {nav_index}
+    <div class="header">
+        <h1>UTINQX - Categorizacion CUDYR</h1>
+        <p>Datos de categorizacion 2024-2025 | UTI Neuroquirurgica</p>
+    </div>
+
     <div class="container">
-        <div class="header">
-            <h1>🏥 Justificación Recurso Enfermero</h1>
-            <p>Unidad de Tratamiento Intensivo Neuroquirúrgico (UTINQX)</p>
-            <p style="margin-top: 10px; font-size: 0.9em;">Análisis basado en datos de categorización CUDYR 2024-2025</p>
-        </div>
 
-        <div class="cards">
-            <div class="card highlight">
-                <h3>⚠️ PROBLEMA CENTRAL</h3>
-                <div class="metric">1:6</div>
-                <div class="metric-label">Ratio enfermero:paciente en UTINQX</div>
-                <div style="margin-top: 15px; font-size: 0.95em;">
-                    UTIQX tiene ratio 1:3 con pacientes de complejidad similar
+        <div class="seccion">
+            <h2>Volumen de Actividad</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>Total Categorizaciones</h3>
+                    <div class="valor">{total_2025:,}</div>
+                    <div class="cambio sube">+{variacion_anual:.1f}% vs 2024 ({total_2024:,})</div>
                 </div>
-            </div>
-
-            <div class="card">
-                <h3>📊 Carga de Trabajo por Enfermero</h3>
-                <div class="metric">{ratio_carga:.1f}x</div>
-                <div class="metric-label">más carga en UTINQX vs UTIQX</div>
-                <div class="comparison">
-                    <div class="comp-item utinqx">
-                        <div class="comp-value">{carga_por_enf_utinqx:.0f}</div>
-                        <div>UTINQX</div>
-                    </div>
-                    <div class="comp-item utiqx">
-                        <div class="comp-value">{carga_por_enf_utiqx:.0f}</div>
-                        <div>UTIQX</div>
-                    </div>
+                <div class="card">
+                    <h3>Pacientes Unicos Atendidos</h3>
+                    <div class="valor">{pac_2025}</div>
+                    <div class="cambio {"sube" if pac_2025 > pac_2024 else "baja"}">{"+" if pac_2025 > pac_2024 else ""}{((pac_2025-pac_2024)/pac_2024*100):.1f}% vs 2024 ({pac_2024})</div>
                 </div>
-            </div>
-
-            <div class="card">
-                <h3>📈 Aumento desde llegada residente</h3>
-                <div class="metric">+{aumento_carga:.1f}%</div>
-                <div class="metric-label">Incremento de carga Abr-Dic 2025 vs 2024</div>
-            </div>
-
-            <div class="card">
-                <h3>🔴 Pacientes Alto Riesgo</h3>
-                <div class="metric">{pct_ar_utinqx:.1f}%</div>
-                <div class="metric-label">de pacientes son categoría A o B</div>
-            </div>
-
-            <div class="card">
-                <h3>🚨 Pacientes Máximo Riesgo (A1)</h3>
-                <div class="metric">{a1_utinqx:.0f}</div>
-                <div class="metric-label">pacientes A1 por enfermero en UTINQX</div>
-                <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
-                    UTIQX: {a1_utiqx:.0f} por enfermero ({((a1_utinqx/a1_utiqx)-1)*100:.0f}% menos)
-                </p>
-            </div>
-
-            <div class="card">
-                <h3>📅 Crecimiento Anual</h3>
-                <div class="metric">+{crec_utinqx:.1f}%</div>
-                <div class="metric-label">Aumento de categorizaciones 2024→2025</div>
-                <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
-                    UTIQX creció +{crec_utiqx:.1f}%
-                </p>
+                <div class="card">
+                    <h3>Categorizaciones por Paciente</h3>
+                    <div class="valor">{estadia_2025:.1f}</div>
+                    <div class="detalle">Promedio de categorizaciones realizadas por cada paciente durante su estadia.
+                    Se realiza 1 categorizacion por dia, por lo que equivale a dias de internacion promedio.
+                    En 2024 fue {estadia_2024:.1f}.</div>
+                </div>
             </div>
         </div>
 
-        <div class="conclusion">
-            <h2>📋 Conclusión y Solicitud</h2>
-            <p style="margin-bottom: 20px; font-size: 1.1em; color: #555;">
-                Con la incorporación de <strong>1 ENFERMERO ADICIONAL</strong>, UTINQX lograría:
-            </p>
-            <ul>
-                <li>Ratio 1:3 (equiparado con UTIQX)</li>
-                <li>Carga de trabajo equitativa entre unidades</li>
-                <li>Mayor seguridad para pacientes de alto riesgo ({pct_ar_utinqx:.1f}% de la unidad)</li>
-                <li>Estabilización de dotación (sin depender de refuerzos)</li>
-                <li>Preparación para el crecimiento proyectado en 2026</li>
-            </ul>
-            <a href="dashboard_utinqx.html" class="btn">📊 Ver Dashboard Interactivo Completo</a>
+        <div class="seccion">
+            <h2>Perfil de Riesgo</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>Pacientes Alto Riesgo (A+B)</h3>
+                    <div class="valor rojo">{pct_ar_2025:.1f}%</div>
+                    <div class="cambio sube">+{pct_ar_2025 - pct_ar_2024:.1f} pp vs 2024 ({pct_ar_2024:.1f}%)</div>
+                </div>
+                <div class="card">
+                    <h3>Categorizaciones A1</h3>
+                    <div class="valor rojo">{a1_2025}</div>
+                    <div class="cambio {"sube" if a1_2025 > a1_2024 else "baja"}">{"+" if a1_2025 > a1_2024 else ""}{((a1_2025-a1_2024)/a1_2024*100):.1f}% vs 2024 ({a1_2024})</div>
+                    <div class="detalle">A1 = Maximo riesgo + Dependencia total. Es la categoria de mayor gravedad en la escala CUDYR.</div>
+                </div>
+                <div class="card">
+                    <h3>Categorizaciones A+B totales</h3>
+                    <div class="valor rojo">{int(ab_2025):,}</div>
+                    <div class="cambio {"sube" if ab_2025 > ab_2024 else "baja"}">{"+" if ab_2025 > ab_2024 else ""}{((ab_2025-ab_2024)/ab_2024*100):.1f}% vs 2024 ({int(ab_2024):,})</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="seccion">
+            <h2>Estabilidad de Pacientes</h2>
+            <div class="grid">
+                <div class="card">
+                    <h3>Pacientes que Cambian de Categoria</h3>
+                    <div class="valor">{pac_cambian_2025}</div>
+                    <div class="cambio {"sube" if pac_cambian_2025 > pac_cambian_2024 else "baja"}">{pct_cambian_2025:.1f}% del total (2024: {pct_cambian_2024:.1f}%)</div>
+                    <div class="detalle">De los {pac_2025} pacientes atendidos en 2025, {pac_cambian_2025} fueron
+                    categorizados con al menos 2 categorias CUDYR distintas durante su estadia.
+                    Esto indica variabilidad en su condicion clinica.</div>
+                </div>
+                <div class="card">
+                    <h3>Pacientes que Empeoran</h3>
+                    <div class="valor rojo">{empeoran_2025}</div>
+                    <div class="detalle">{total_con_evol_2025} pacientes estuvieron internados 2 o mas dias
+                    (tienen 2+ categorizaciones). De esos, {empeoran_2025} egresaron con una categoria de
+                    mayor riesgo que la que tenian al ingresar (ej: de B1 a A1).</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="seccion">
+            <h2>Detalle Mensual 2025 vs 2024</h2>
+            <div class="tabla-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Mes</th>
+                            <th>Cat. 2024</th>
+                            <th>Cat. 2025</th>
+                            <th>Diferencia</th>
+                            <th>% A+B 2024</th>
+                            <th>% A+B 2025</th>
+                        </tr>
+                    </thead>
+                    <tbody>"""
+
+for i in range(1, 13):
+    c24 = cat_mes_2024.get(i, 0)
+    c25 = cat_mes_2025.get(i, 0)
+    d = c25 - c24
+    ar24 = ar_mes_2024.get(i, 0)
+    ar25 = ar_mes_2025.get(i, 0)
+    clase_diff = 'positivo' if d > 0 else ('negativo' if d < 0 else '')
+    signo = '+' if d > 0 else ''
+    html_index += f"""
+                        <tr>
+                            <td><strong>{meses[i-1]}</strong></td>
+                            <td>{c24}</td>
+                            <td>{c25}</td>
+                            <td class="{clase_diff}">{signo}{d}</td>
+                            <td>{ar24:.1f}%</td>
+                            <td>{ar25:.1f}%</td>
+                        </tr>"""
+
+html_index += f"""
+                    </tbody>
+                    <tfoot>
+                        <tr style="background: #f8f9fa; font-weight: bold;">
+                            <td>TOTAL</td>
+                            <td>{total_2024}</td>
+                            <td>{total_2025}</td>
+                            <td class="positivo">+{total_2025 - total_2024}</td>
+                            <td>{pct_ar_2024:.1f}%</td>
+                            <td>{pct_ar_2025:.1f}%</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <div class="seccion">
+            <h2>Distribucion de Categorias 2025</h2>
+            <div class="tabla-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Categoria</th>
+                            <th>Cantidad 2024</th>
+                            <th>Cantidad 2025</th>
+                            <th>% del Total 2025</th>
+                            <th>Riesgo</th>
+                        </tr>
+                    </thead>
+                    <tbody>"""
+
+# Todas las categorias que aparecen
+todas_cat = sorted(set(dist_2024.index.tolist() + dist_2025.index.tolist()))
+riesgo_labels = {'A': 'Maximo', 'B': 'Alto', 'C': 'Mediano', 'D': 'Bajo'}
+
+for cat in todas_cat:
+    c24 = dist_2024.get(cat, 0)
+    c25 = dist_2025.get(cat, 0)
+    pct = c25 / total_2025 * 100
+    nivel = riesgo_labels.get(cat[0], '?')
+    html_index += f"""
+                        <tr>
+                            <td><strong>{cat}</strong></td>
+                            <td>{c24}</td>
+                            <td>{c25}</td>
+                            <td>{pct:.1f}%</td>
+                            <td>{nivel}</td>
+                        </tr>"""
+
+html_index += f"""
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="nota">
+            <strong>Fuente de datos:</strong> Sistema de categorizacion CUDYR.
+            Todos los valores corresponden a conteos directos de las categorizaciones
+            registradas en el sistema. No se incluyen estimaciones ni proyecciones.
         </div>
 
         <div class="footer">
-            <p>Análisis realizado por Nicolás Morales</p>
-            <p>Datos: Sistema de Categorización CUDYR 2024-2025</p>
+            <p>UTI Neuroquirurgica | Datos CUDYR 2024-2025</p>
         </div>
     </div>
 </body>
-</html>
-"""
+</html>"""
 
 with open("index.html", "w", encoding="utf-8") as f:
-    f.write(html_resumen)
+    f.write(html_index)
 
-print("    OK - Pagina de resumen guardada como 'index.html'")
-print("\n" + "="*60)
-print("ARCHIVOS GENERADOS:")
-print("   • index.html - Resumen ejecutivo (página principal)")
-print("   • dashboard_utinqx.html - Dashboard interactivo completo")
-print("="*60)
-print("\nPara GitHub Pages:")
-print("   1. Crea un repositorio en GitHub")
-print("   2. Sube estos archivos + los Excel")
-print("   3. Activa GitHub Pages en Settings")
-print("   4. ¡Listo! Tu dashboard estará en línea")
+print("    OK - dashboard_utinqx.html generado")
+print("    OK - index.html generado")
+
+# ============================================================
+# 5. HTML AMBAS UTIs (exposicion de datos, no comparacion)
+# ============================================================
+print("[5/5] Creando pagina ambas UTIs...")
+
+nav_ambas = get_nav('ambas')
+
+# Tabla mensual para ambas UTIs
+tabla_mensual_ambas = ""
+for i in range(1, 13):
+    nqx24 = cat_mes_2024.get(i, 0)
+    nqx25 = cat_mes_2025.get(i, 0)
+    qx24 = qx_cat_mes_2024.get(i, 0)
+    qx25 = qx_cat_mes_2025.get(i, 0)
+    ar_nqx25 = ar_mes_2025.get(i, 0)
+    ar_qx25 = qx_ar_mes_2025.get(i, 0)
+    tabla_mensual_ambas += f"""
+                        <tr>
+                            <td><strong>{meses[i-1]}</strong></td>
+                            <td>{nqx24}</td>
+                            <td>{nqx25}</td>
+                            <td>{qx24}</td>
+                            <td>{qx25}</td>
+                            <td>{ar_nqx25:.1f}%</td>
+                            <td>{ar_qx25:.1f}%</td>
+                        </tr>"""
+
+# Tabla distribucion categorias ambas UTIs 2025
+todas_cat_ambas = sorted(set(
+    dist_2025.index.tolist() + qx_dist_2025.index.tolist()
+))
+tabla_dist_ambas = ""
+for cat in todas_cat_ambas:
+    nqx = dist_2025.get(cat, 0)
+    qx = qx_dist_2025.get(cat, 0)
+    pct_nqx = nqx / total_2025 * 100 if total_2025 > 0 else 0
+    pct_qx = qx / qx_total_2025 * 100 if qx_total_2025 > 0 else 0
+    nivel = riesgo_labels.get(cat[0], '?')
+    tabla_dist_ambas += f"""
+                        <tr>
+                            <td><strong>{cat}</strong></td>
+                            <td>{nqx}</td>
+                            <td>{pct_nqx:.1f}%</td>
+                            <td>{qx}</td>
+                            <td>{pct_qx:.1f}%</td>
+                            <td>{nivel}</td>
+                        </tr>"""
+
+qx_variacion = ((qx_total_2025 - qx_total_2024) / qx_total_2024) * 100
+
+html_ambas = f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ambas UTIs - Categorizacion CUDYR 2024-2025</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+            color: #2c3e50;
+            line-height: 1.6;
+        }}
+        .header {{
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }}
+        .header h1 {{ font-size: 2em; margin-bottom: 8px; }}
+        .header p {{ font-size: 1em; opacity: 0.85; }}
+        .container {{ max-width: 1200px; margin: 0 auto; padding: 30px 20px; }}
+
+        .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 30px; }}
+        .grid-2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }}
+
+        .card {{
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        }}
+        .card h3 {{
+            color: #7f8c8d;
+            margin-bottom: 8px;
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        .card .valor {{
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #2c3e50;
+        }}
+        .card .valor.rojo {{ color: #c0392b; }}
+        .card .cambio {{
+            font-size: 0.9em;
+            margin-top: 6px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }}
+        .card .cambio.sube {{ background: #fce4e4; color: #c0392b; }}
+        .card .cambio.baja {{ background: #d5f5d5; color: #27ae60; }}
+        .card .cambio.neutro {{ background: #eee; color: #666; }}
+        .card .detalle {{ color: #95a5a6; font-size: 0.88em; margin-top: 8px; }}
+        .card .unidad-label {{
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }}
+        .label-nqx {{ background: #e8f4fd; color: #2980b9; }}
+        .label-qx {{ background: #fdebd0; color: #e67e22; }}
+
+        .seccion {{ margin-bottom: 30px; }}
+        .seccion h2 {{
+            color: #2c3e50;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #e0e0e0;
+        }}
+
+        .tabla-container {{
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            overflow-x: auto;
+        }}
+        table {{ width: 100%; border-collapse: collapse; font-size: 0.92em; }}
+        th {{ background: #2c3e50; color: white; padding: 10px 12px; text-align: center; }}
+        th.nqx {{ background: #2980b9; }}
+        th.qx {{ background: #e67e22; }}
+        td {{ padding: 8px 12px; text-align: center; border-bottom: 1px solid #ecf0f1; }}
+        tr:hover {{ background: #f8f9fa; }}
+
+        .nota {{
+            background: #fef9e7;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #7d6608;
+        }}
+        .footer {{
+            text-align: center;
+            padding: 25px;
+            color: #95a5a6;
+            font-size: 0.85em;
+        }}
+
+        @media (max-width: 768px) {{
+            .grid-2 {{ grid-template-columns: 1fr; }}
+        }}
+    </style>
+</head>
+<body>
+    {nav_ambas}
+    <div class="header">
+        <h1>Categorizacion CUDYR - Ambas UTIs</h1>
+        <p>Datos de categorizacion 2024-2025 | UTI Neuroquirurgica</p>
+    </div>
+
+    <div class="container">
+
+        <!-- VOLUMEN GENERAL -->
+        <div class="seccion">
+            <h2>Volumen de Actividad por Unidad</h2>
+            <div class="grid-2">
+                <div class="card">
+                    <span class="unidad-label label-nqx">UTINQX</span>
+                    <h3>Total Categorizaciones</h3>
+                    <div class="valor">{total_2025:,}</div>
+                    <div class="cambio sube">+{variacion_anual:.1f}% vs 2024 ({total_2024:,})</div>
+                    <div class="detalle">{pac_2025} pacientes unicos atendidos en 2025 (2024: {pac_2024})</div>
+                </div>
+                <div class="card">
+                    <span class="unidad-label label-qx">UTIQX</span>
+                    <h3>Total Categorizaciones</h3>
+                    <div class="valor">{qx_total_2025:,}</div>
+                    <div class="cambio {"sube" if qx_variacion > 0 else "baja"}">{"+" if qx_variacion > 0 else ""}{qx_variacion:.1f}% vs 2024 ({qx_total_2024:,})</div>
+                    <div class="detalle">{qx_pac_2025} pacientes unicos atendidos en 2025 (2024: {qx_pac_2024})</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PERFIL DE RIESGO -->
+        <div class="seccion">
+            <h2>Perfil de Riesgo por Unidad (2025)</h2>
+            <div class="grid">
+                <div class="card">
+                    <span class="unidad-label label-nqx">UTINQX</span>
+                    <h3>% Alto Riesgo (A+B)</h3>
+                    <div class="valor rojo">{pct_ar_2025:.1f}%</div>
+                    <div class="detalle">{int(ab_2025):,} categorizaciones A+B de {total_2025:,} totales</div>
+                </div>
+                <div class="card">
+                    <span class="unidad-label label-qx">UTIQX</span>
+                    <h3>% Alto Riesgo (A+B)</h3>
+                    <div class="valor rojo">{qx_pct_ar_2025:.1f}%</div>
+                    <div class="detalle">{int(qx_ab_2025):,} categorizaciones A+B de {qx_total_2025:,} totales</div>
+                </div>
+                <div class="card">
+                    <span class="unidad-label label-nqx">UTINQX</span>
+                    <h3>Categorizaciones A1</h3>
+                    <div class="valor rojo">{a1_2025}</div>
+                    <div class="detalle">Maximo riesgo + dependencia total (2024: {a1_2024})</div>
+                </div>
+                <div class="card">
+                    <span class="unidad-label label-qx">UTIQX</span>
+                    <h3>Categorizaciones A1</h3>
+                    <div class="valor rojo">{qx_a1_2025}</div>
+                    <div class="detalle">Maximo riesgo + dependencia total (2024: {qx_a1_2024})</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ESTADIA -->
+        <div class="seccion">
+            <h2>Categorizaciones por Paciente</h2>
+            <div class="grid-2">
+                <div class="card">
+                    <span class="unidad-label label-nqx">UTINQX</span>
+                    <h3>Promedio cat. por paciente</h3>
+                    <div class="valor">{estadia_2025:.1f}</div>
+                    <div class="detalle">Equivale aprox. a dias de internacion promedio. En 2024 fue {estadia_2024:.1f}.</div>
+                </div>
+                <div class="card">
+                    <span class="unidad-label label-qx">UTIQX</span>
+                    <h3>Promedio cat. por paciente</h3>
+                    <div class="valor">{qx_estadia_2025:.1f}</div>
+                    <div class="detalle">Equivale aprox. a dias de internacion promedio. En 2024 fue {qx_estadia_2024:.1f}.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLA MENSUAL AMBAS -->
+        <div class="seccion">
+            <h2>Detalle Mensual 2024-2025</h2>
+            <div class="tabla-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th rowspan="2">Mes</th>
+                            <th class="nqx" colspan="2">UTINQX</th>
+                            <th class="qx" colspan="2">UTIQX</th>
+                            <th class="nqx">% A+B UTINQX</th>
+                            <th class="qx">% A+B UTIQX</th>
+                        </tr>
+                        <tr>
+                            <th class="nqx">2024</th>
+                            <th class="nqx">2025</th>
+                            <th class="qx">2024</th>
+                            <th class="qx">2025</th>
+                            <th class="nqx">2025</th>
+                            <th class="qx">2025</th>
+                        </tr>
+                    </thead>
+                    <tbody>{tabla_mensual_ambas}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background: #f8f9fa; font-weight: bold;">
+                            <td>TOTAL</td>
+                            <td>{total_2024}</td>
+                            <td>{total_2025}</td>
+                            <td>{qx_total_2024}</td>
+                            <td>{qx_total_2025}</td>
+                            <td>{pct_ar_2025:.1f}%</td>
+                            <td>{qx_pct_ar_2025:.1f}%</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <!-- DISTRIBUCION CATEGORIAS AMBAS -->
+        <div class="seccion">
+            <h2>Distribucion de Categorias 2025</h2>
+            <div class="tabla-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th rowspan="2">Categoria</th>
+                            <th class="nqx" colspan="2">UTINQX</th>
+                            <th class="qx" colspan="2">UTIQX</th>
+                            <th rowspan="2">Riesgo</th>
+                        </tr>
+                        <tr>
+                            <th class="nqx">Cantidad</th>
+                            <th class="nqx">%</th>
+                            <th class="qx">Cantidad</th>
+                            <th class="qx">%</th>
+                        </tr>
+                    </thead>
+                    <tbody>{tabla_dist_ambas}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="nota">
+            <strong>Fuente de datos:</strong> Sistema de categorizacion CUDYR.
+            Todos los valores corresponden a conteos directos de las categorizaciones
+            registradas en el sistema. No se incluyen estimaciones ni proyecciones.
+            Cada unidad se presenta con sus propios datos para su lectura independiente.
+        </div>
+
+        <div class="footer">
+            <p>UTI Neuroquirurgica | Datos CUDYR 2024-2025</p>
+        </div>
+    </div>
+</body>
+</html>"""
+
+with open("ambas_uti.html", "w", encoding="utf-8") as f:
+    f.write(html_ambas)
+
+print("    OK - ambas_uti.html generado")
+print("\n" + "=" * 50)
+print("Archivos generados:")
+print("  - index.html (resumen UTINQX)")
+print("  - dashboard_utinqx.html (dashboard interactivo UTINQX)")
+print("  - ambas_uti.html (datos ambas UTIs)")
+print("=" * 50)
